@@ -1,0 +1,405 @@
+MetaGate v0 Specification
+
+Meta configuration authority and bootstrap witness for LegiVellum-compatible systems
+
+0. Purpose & Doctrine
+
+MetaGate is the first flame.
+
+MetaGate is a non-blocking, describe-only bootstrap authority that provides world truth to components before they participate in a distributed system.
+
+MetaGate:
+
+authenticates callers
+
+resolves identity → binding → profile → manifest
+
+returns a Welcome Packet describing the environment
+
+issues a startup OPEN receipt as a witness of bootstrap
+
+fucks off
+
+MetaGate never:
+
+assigns work
+
+provisions infrastructure
+
+waits on other services
+
+orchestrates execution
+
+blocks on health checks
+
+distributes task payloads
+
+MetaGate must remain operational even if the rest of the system is unavailable.
+
+1. Core Concepts
+1.1 Principal
+
+A principal is who is speaking.
+
+Identified by auth subject (sub)
+
+Maps to a stable principal_key
+
+Owns zero or more component instantiations over time
+
+1.2 Component
+
+A component is what is being instantiated.
+
+Examples:
+
+memorygate_main
+
+asyncgate_default
+
+delegate_root
+
+worker_indexer_01
+
+component_key is required on every bootstrap.
+
+1.3 Profile
+
+A profile defines:
+
+capabilities
+
+policy constraints
+
+startup SLA defaults
+
+secret handling rules
+
+Profiles answer: “What kind of thing is this?”
+
+1.4 Manifest
+
+A manifest describes the world:
+
+services that exist
+
+endpoints and auth expectations
+
+memory gate usage
+
+polling locations (pointers only)
+
+schema references
+
+Manifests answer: “What world am I in?”
+
+1.5 Binding
+
+A binding ties:
+
+principal → profile + manifest (+ overrides)
+
+
+Exactly one active binding per principal in v0.
+
+2. Non-Blocking Doctrine (Hard Invariant)
+
+MetaGate request handling must be:
+
+synchronous
+
+bounded
+
+DB-only
+
+side-effect minimal
+
+MetaGate may fail fast, but must not wait.
+
+Receipt logging, mirroring, presence tracking are best-effort and must never block /bootstrap.
+
+3. Identity Resolution Rules
+
+Auth subject (sub) is authoritative
+
+Caller must supply component_key
+
+Caller may supply principal_key as a hint
+
+MetaGate verifies:
+
+auth subject maps to principal
+
+binding exists
+
+component_key is permitted by binding
+
+Failure → 403 / 409 (never partial success)
+
+4. Secrets Model (v0 Default)
+4.1 Default Mode
+
+Secrets are references only
+
+Primarily environment variables
+
+MetaGate does not store secret values
+
+4.2 Supported Ref Kinds (v0)
+
+env (default)
+
+file (optional, local rigs)
+
+4.3 Future
+
+keygate ref kind reserved
+
+Inline secret material explicitly deferred
+
+5. Startup Receipt Model (MetaGate-Local)
+5.1 Rationale
+
+Bootstrap is a moment in time that may precede component readiness.
+
+MetaGate acts as a witness of birth.
+
+5.2 Startup Lifecycle
+
+Each bootstrap request creates a startup session:
+
+OPEN – issued by MetaGate when packet is returned
+
+READY – issued by component when listening + initialized
+
+FAILED – issued by component if startup aborts
+
+Absence of READY past SLA is meaningful state.
+
+6. Postgres Schema (DDL)
+6.1 principals
+CREATE TABLE principals (
+  id UUID PRIMARY KEY,
+  tenant_key TEXT DEFAULT 'default',
+  principal_key TEXT UNIQUE NOT NULL,
+  auth_subject TEXT UNIQUE NOT NULL,
+  principal_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+6.2 profiles
+CREATE TABLE profiles (
+  id UUID PRIMARY KEY,
+  tenant_key TEXT DEFAULT 'default',
+  profile_key TEXT UNIQUE NOT NULL,
+  capabilities JSONB NOT NULL,
+  policy JSONB NOT NULL,
+  startup_sla_seconds INT DEFAULT 120,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+6.3 manifests
+CREATE TABLE manifests (
+  id UUID PRIMARY KEY,
+  tenant_key TEXT DEFAULT 'default',
+  manifest_key TEXT UNIQUE NOT NULL,
+  deployment_key TEXT DEFAULT 'default',
+  environment JSONB NOT NULL,
+  services JSONB NOT NULL,
+  memory_map JSONB NOT NULL,
+  polling JSONB NOT NULL,
+  schemas JSONB NOT NULL,
+  version INT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+6.4 bindings
+CREATE TABLE bindings (
+  id UUID PRIMARY KEY,
+  tenant_key TEXT DEFAULT 'default',
+  principal_id UUID REFERENCES principals(id),
+  profile_id UUID REFERENCES profiles(id),
+  manifest_id UUID REFERENCES manifests(id),
+  overrides JSONB,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+6.5 secret_refs
+CREATE TABLE secret_refs (
+  id UUID PRIMARY KEY,
+  tenant_key TEXT DEFAULT 'default',
+  secret_key TEXT UNIQUE NOT NULL,
+  ref_kind TEXT DEFAULT 'env',
+  ref_name TEXT NOT NULL,
+  ref_meta JSONB,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+6.6 startup_sessions
+CREATE TABLE startup_sessions (
+  id UUID PRIMARY KEY,
+  tenant_key TEXT DEFAULT 'default',
+  deployment_key TEXT DEFAULT 'default',
+  subject_principal_key TEXT NOT NULL,
+  component_key TEXT NOT NULL,
+  profile_key TEXT NOT NULL,
+  manifest_key TEXT NOT NULL,
+  packet_etag TEXT NOT NULL,
+  packet_hash_redacted TEXT NOT NULL,
+  status TEXT NOT NULL,
+  opened_at TIMESTAMPTZ NOT NULL,
+  deadline_at TIMESTAMPTZ,
+  ready_at TIMESTAMPTZ,
+  failed_at TIMESTAMPTZ,
+  ready_payload JSONB,
+  failure_payload JSONB,
+  mirror_status TEXT DEFAULT 'PENDING',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+7. API Contract
+7.1 Discovery
+GET /.well-known/metagate.json
+
+
+Returns:
+
+{
+  "metagate_version": "0.1",
+  "bootstrap_endpoint": "/v1/bootstrap",
+  "supported_auth": ["jwt", "api_key"]
+}
+
+7.2 Bootstrap
+POST /v1/bootstrap
+
+
+Request
+
+{
+  "component_key": "memorygate_main",
+  "principal_key": "optional_hint",
+  "last_packet_etag": "optional"
+}
+
+
+Response
+
+200 OK with Welcome Packet
+
+304 Not Modified if etag matches
+
+7.3 Startup Ready
+POST /v1/startup/ready
+
+{
+  "startup_id": "uuid",
+  "build_version": "string",
+  "health": "optional summary"
+}
+
+7.4 Startup Failed
+POST /v1/startup/failed
+
+{
+  "startup_id": "uuid",
+  "error": "string",
+  "details": {}
+}
+
+8. Welcome Packet Schema (Conceptual)
+
+Top-level keys:
+
+{
+  "packet_id",
+  "packet_etag",
+  "issued_at",
+  "principal_key",
+  "component_key",
+  "profile",
+  "manifest",
+  "capabilities",
+  "policy",
+  "services",
+  "memory_map",
+  "polling",
+  "schemas",
+  "required_env",
+  "startup"
+}
+
+8.1 Startup Block
+"startup": {
+  "startup_id": "uuid",
+  "status": "OPEN",
+  "deadline_at": "timestamp",
+  "followup": [
+    "POST /v1/startup/ready",
+    "POST /v1/startup/failed"
+  ]
+}
+
+9. Forbidden Keys (Enforced)
+
+Packets and manifests must not contain:
+
+tasks
+
+jobs
+
+work_items
+
+payloads
+
+deploy
+
+scale
+
+provision
+
+execute
+
+Violation → write-time rejection.
+
+10. Mirroring (Deferred, Schema-Ready)
+
+Startup sessions may be mirrored to a global receipt store (MemoryGate)
+
+Mirroring is async, best-effort
+
+MetaGate remains authoritative for bootstrap witness data
+
+11. Retention Policy
+
+Startup receipts retained locally for configurable SLA
+
+Default: 72 hours
+
+Cleanup allowed only after mirror or explicit skip
+
+12. Final Invariants (Non-Negotiable)
+
+MetaGate must never block on other services
+
+MetaGate must never assign work
+
+Every bootstrap creates exactly one OPEN startup receipt
+
+Every component must self-report READY or FAILED
+
+Absence of READY is meaningful state
+
+Secrets are references by default
+
+principal_key and component_key are always required
+
+MetaGate is truth, not control
