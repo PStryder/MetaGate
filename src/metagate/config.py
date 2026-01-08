@@ -96,9 +96,10 @@ class Settings(BaseSettings):
 
     @field_validator("jwt_secret")
     @classmethod
-    def validate_jwt_secret(cls, v: str) -> str:
+    def validate_jwt_secret(cls, v: str, info) -> str:
         """Validate JWT secret is not default in production."""
-        if v == "change-me-in-production":
+        debug = info.data.get("debug", False)
+        if v == "change-me-in-production" and not debug:
             raise ValueError("jwt_secret must be changed from default value in production")
         return v
 
