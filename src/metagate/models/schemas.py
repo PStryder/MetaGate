@@ -5,6 +5,22 @@ from datetime import datetime
 from uuid import UUID
 
 
+# =============================================================================
+# Health & Service Models
+# =============================================================================
+
+class HealthResponse(BaseModel):
+    """Standard health check response"""
+    status: str
+    service: str = "MetaGate"
+    version: str
+    instance_id: str
+
+
+# =============================================================================
+# Request & Response Schemas
+# =============================================================================
+
 # Request schemas
 class BootstrapRequest(BaseModel):
     """Request body for POST /v1/bootstrap."""

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from typing import List
 
 from ..database import get_db
+from ..config import get_settings
 from ..models.db_models import Principal, Profile, Manifest, Binding, SecretRef
 from ..models.schemas import (
     PrincipalCreate, PrincipalResponse,
@@ -15,9 +16,26 @@ from ..models.schemas import (
     SecretRefCreate, SecretRefResponse,
 )
 from ..services.bootstrap import FORBIDDEN_KEYS, check_forbidden_keys
-from ..auth.auth import AuthenticatedPrincipal, get_authenticated_principal
+from ..auth.auth import AuthenticatedPrincipal, require_admin
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
+settings = get_settings()
+
+
+def resolve_tenant_key(auth: AuthenticatedPrincipal, requested: str | None) -> str:
+    """Resolve tenant key for admin operations with optional cross-tenant access."""
+    if settings.admin_allow_cross_tenant:
+        return requested or auth.principal.tenant_key
+    if requested and requested != auth.principal.tenant_key:
+        raise HTTPException(status_code=403, detail="Cross-tenant admin access denied")
+    return auth.principal.tenant_key
+
+
+def apply_tenant_scope(query, auth: AuthenticatedPrincipal, model):
+    """Apply tenant scoping to a query if cross-tenant access is disabled."""
+    if settings.admin_allow_cross_tenant:
+        return query
+    return query.where(model.tenant_key == auth.principal.tenant_key)
 
 
 # Principals
@@ -25,12 +43,13 @@ router = APIRouter(prefix="/v1/admin", tags=["admin"])
 async def create_principal(
     data: PrincipalCreate,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Create a new principal."""
+    tenant_key = resolve_tenant_key(auth, data.tenant_key)
     principal = Principal(
         id=uuid4(),
-        tenant_key=data.tenant_key,
+        tenant_key=tenant_key,
         principal_key=data.principal_key,
         auth_subject=data.auth_subject,
         principal_type=data.principal_type,
@@ -49,9 +68,10 @@ async def create_principal(
 async def list_principals(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """List all principals for a tenant."""
+    tenant_key = resolve_tenant_key(auth, tenant_key)
     result = await db.execute(
         select(Principal).where(Principal.tenant_key == tenant_key)
     )
@@ -62,12 +82,12 @@ async def list_principals(
 async def get_principal(
     principal_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Get a principal by ID."""
-    result = await db.execute(
-        select(Principal).where(Principal.id == principal_id)
-    )
+    query = select(Principal).where(Principal.id == principal_id)
+    query = apply_tenant_scope(query, auth, Principal)
+    result = await db.execute(query)
     principal = result.scalar_one_or_none()
     if not principal:
         raise HTTPException(status_code=404, detail="Principal not found")
@@ -78,12 +98,12 @@ async def get_principal(
 async def delete_principal(
     principal_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Delete a principal."""
-    result = await db.execute(
-        select(Principal).where(Principal.id == principal_id)
-    )
+    query = select(Principal).where(Principal.id == principal_id)
+    query = apply_tenant_scope(query, auth, Principal)
+    result = await db.execute(query)
     principal = result.scalar_one_or_none()
     if not principal:
         raise HTTPException(status_code=404, detail="Principal not found")
@@ -96,7 +116,7 @@ async def delete_principal(
 async def create_profile(
     data: ProfileCreate,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Create a new profile."""
     # Check for forbidden keys
@@ -104,9 +124,10 @@ async def create_profile(
     if forbidden:
         raise HTTPException(status_code=400, detail=f"Forbidden keys detected: {forbidden}")
 
+    tenant_key = resolve_tenant_key(auth, data.tenant_key)
     profile = Profile(
         id=uuid4(),
-        tenant_key=data.tenant_key,
+        tenant_key=tenant_key,
         profile_key=data.profile_key,
         capabilities=data.capabilities,
         policy=data.policy,
@@ -126,9 +147,10 @@ async def create_profile(
 async def list_profiles(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """List all profiles for a tenant."""
+    tenant_key = resolve_tenant_key(auth, tenant_key)
     result = await db.execute(
         select(Profile).where(Profile.tenant_key == tenant_key)
     )
@@ -139,12 +161,12 @@ async def list_profiles(
 async def get_profile(
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Get a profile by ID."""
-    result = await db.execute(
-        select(Profile).where(Profile.id == profile_id)
-    )
+    query = select(Profile).where(Profile.id == profile_id)
+    query = apply_tenant_scope(query, auth, Profile)
+    result = await db.execute(query)
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -155,12 +177,12 @@ async def get_profile(
 async def delete_profile(
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Delete a profile."""
-    result = await db.execute(
-        select(Profile).where(Profile.id == profile_id)
-    )
+    query = select(Profile).where(Profile.id == profile_id)
+    query = apply_tenant_scope(query, auth, Profile)
+    result = await db.execute(query)
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -173,7 +195,7 @@ async def delete_profile(
 async def create_manifest(
     data: ManifestCreate,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Create a new manifest."""
     # Check for forbidden keys
@@ -188,9 +210,10 @@ async def create_manifest(
     if forbidden:
         raise HTTPException(status_code=400, detail=f"Forbidden keys detected: {forbidden}")
 
+    tenant_key = resolve_tenant_key(auth, data.tenant_key)
     manifest = Manifest(
         id=uuid4(),
-        tenant_key=data.tenant_key,
+        tenant_key=tenant_key,
         manifest_key=data.manifest_key,
         deployment_key=data.deployment_key,
         environment=data.environment,
@@ -214,9 +237,10 @@ async def create_manifest(
 async def list_manifests(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """List all manifests for a tenant."""
+    tenant_key = resolve_tenant_key(auth, tenant_key)
     result = await db.execute(
         select(Manifest).where(Manifest.tenant_key == tenant_key)
     )
@@ -227,12 +251,12 @@ async def list_manifests(
 async def get_manifest(
     manifest_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Get a manifest by ID."""
-    result = await db.execute(
-        select(Manifest).where(Manifest.id == manifest_id)
-    )
+    query = select(Manifest).where(Manifest.id == manifest_id)
+    query = apply_tenant_scope(query, auth, Manifest)
+    result = await db.execute(query)
     manifest = result.scalar_one_or_none()
     if not manifest:
         raise HTTPException(status_code=404, detail="Manifest not found")
@@ -243,12 +267,12 @@ async def get_manifest(
 async def delete_manifest(
     manifest_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Delete a manifest."""
-    result = await db.execute(
-        select(Manifest).where(Manifest.id == manifest_id)
-    )
+    query = select(Manifest).where(Manifest.id == manifest_id)
+    query = apply_tenant_scope(query, auth, Manifest)
+    result = await db.execute(query)
     manifest = result.scalar_one_or_none()
     if not manifest:
         raise HTTPException(status_code=404, detail="Manifest not found")
@@ -261,27 +285,28 @@ async def delete_manifest(
 async def create_binding(
     data: BindingCreate,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Create a new binding."""
+    tenant_key = resolve_tenant_key(auth, data.tenant_key)
     # Verify principal exists
-    result = await db.execute(
-        select(Principal).where(Principal.id == data.principal_id)
-    )
+    query = select(Principal).where(Principal.id == data.principal_id)
+    query = apply_tenant_scope(query, auth, Principal)
+    result = await db.execute(query)
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Principal not found")
 
     # Verify profile exists
-    result = await db.execute(
-        select(Profile).where(Profile.id == data.profile_id)
-    )
+    query = select(Profile).where(Profile.id == data.profile_id)
+    query = apply_tenant_scope(query, auth, Profile)
+    result = await db.execute(query)
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Profile not found")
 
     # Verify manifest exists
-    result = await db.execute(
-        select(Manifest).where(Manifest.id == data.manifest_id)
-    )
+    query = select(Manifest).where(Manifest.id == data.manifest_id)
+    query = apply_tenant_scope(query, auth, Manifest)
+    result = await db.execute(query)
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Manifest not found")
 
@@ -290,6 +315,7 @@ async def create_binding(
         result = await db.execute(
             select(Binding).where(
                 Binding.principal_id == data.principal_id,
+                Binding.tenant_key == tenant_key,
                 Binding.active == True
             )
         )
@@ -299,7 +325,7 @@ async def create_binding(
 
     binding = Binding(
         id=uuid4(),
-        tenant_key=data.tenant_key,
+        tenant_key=tenant_key,
         principal_id=data.principal_id,
         profile_id=data.profile_id,
         manifest_id=data.manifest_id,
@@ -320,9 +346,10 @@ async def create_binding(
 async def list_bindings(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """List all bindings for a tenant."""
+    tenant_key = resolve_tenant_key(auth, tenant_key)
     result = await db.execute(
         select(Binding).where(Binding.tenant_key == tenant_key)
     )
@@ -333,12 +360,12 @@ async def list_bindings(
 async def get_binding(
     binding_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Get a binding by ID."""
-    result = await db.execute(
-        select(Binding).where(Binding.id == binding_id)
-    )
+    query = select(Binding).where(Binding.id == binding_id)
+    query = apply_tenant_scope(query, auth, Binding)
+    result = await db.execute(query)
     binding = result.scalar_one_or_none()
     if not binding:
         raise HTTPException(status_code=404, detail="Binding not found")
@@ -349,12 +376,12 @@ async def get_binding(
 async def delete_binding(
     binding_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Delete a binding."""
-    result = await db.execute(
-        select(Binding).where(Binding.id == binding_id)
-    )
+    query = select(Binding).where(Binding.id == binding_id)
+    query = apply_tenant_scope(query, auth, Binding)
+    result = await db.execute(query)
     binding = result.scalar_one_or_none()
     if not binding:
         raise HTTPException(status_code=404, detail="Binding not found")
@@ -367,15 +394,16 @@ async def delete_binding(
 async def create_secret_ref(
     data: SecretRefCreate,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Create a new secret reference."""
     if data.ref_kind not in ("env", "file"):
         raise HTTPException(status_code=400, detail="ref_kind must be 'env' or 'file'")
 
+    tenant_key = resolve_tenant_key(auth, data.tenant_key)
     secret_ref = SecretRef(
         id=uuid4(),
-        tenant_key=data.tenant_key,
+        tenant_key=tenant_key,
         secret_key=data.secret_key,
         ref_kind=data.ref_kind,
         ref_name=data.ref_name,
@@ -395,9 +423,10 @@ async def create_secret_ref(
 async def list_secret_refs(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """List all secret refs for a tenant."""
+    tenant_key = resolve_tenant_key(auth, tenant_key)
     result = await db.execute(
         select(SecretRef).where(SecretRef.tenant_key == tenant_key)
     )
@@ -408,12 +437,12 @@ async def list_secret_refs(
 async def delete_secret_ref(
     secret_ref_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+    auth: AuthenticatedPrincipal = Depends(require_admin),
 ):
     """Delete a secret reference."""
-    result = await db.execute(
-        select(SecretRef).where(SecretRef.id == secret_ref_id)
-    )
+    query = select(SecretRef).where(SecretRef.id == secret_ref_id)
+    query = apply_tenant_scope(query, auth, SecretRef)
+    result = await db.execute(query)
     secret_ref = result.scalar_one_or_none()
     if not secret_ref:
         raise HTTPException(status_code=404, detail="Secret ref not found")

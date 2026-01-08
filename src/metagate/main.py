@@ -5,7 +5,7 @@ MetaGate is the first flame.
 MetaGate is a non-blocking, describe-only bootstrap authority that provides
 world truth to components before they participate in a distributed system.
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -16,8 +16,20 @@ from .api.discovery import router as discovery_router
 from .api.bootstrap import router as bootstrap_router
 from .api.startup import router as startup_router
 from .api.admin import router as admin_router
+from .middleware import get_rate_limiter
 
 settings = get_settings()
+
+
+# Rate limiting dependency
+async def rate_limit_dependency(request: Request) -> None:
+    """Rate limiting dependency."""
+    limiter = get_rate_limiter(
+        calls_per_minute=settings.rate_limit_requests_per_minute,
+        enabled=settings.rate_limit_enabled
+    )
+    await limiter.check_request(request)
+
 
 # Configure logging
 logging.basicConfig(
@@ -71,10 +83,10 @@ MetaGate is truth, not control.
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allowed_methods,
+    allow_headers=settings.cors_allowed_headers,
 )
 
 
@@ -88,17 +100,22 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Include routers
-app.include_router(discovery_router)
-app.include_router(bootstrap_router)
-app.include_router(startup_router)
-app.include_router(admin_router)
+# Include routers (with rate limiting)
+app.include_router(discovery_router, dependencies=[Depends(rate_limit_dependency)])
+app.include_router(bootstrap_router, dependencies=[Depends(rate_limit_dependency)])
+app.include_router(startup_router, dependencies=[Depends(rate_limit_dependency)])
+app.include_router(admin_router, dependencies=[Depends(rate_limit_dependency)])
 
 
 @app.get("/health", tags=["health"])
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "version": settings.metagate_version}
+    return {
+        "status": "healthy",
+        "service": "MetaGate",
+        "version": settings.metagate_version,
+        "instance_id": settings.instance_id
+    }
 
 
 @app.get("/", tags=["root"])

@@ -37,6 +37,15 @@ class AuthenticatedPrincipal:
         return self.principal.principal_key if self.principal else None
 
 
+def is_admin_principal(principal: Principal) -> bool:
+    """Return True if principal is allowed to access admin endpoints."""
+    if principal.principal_type in settings.admin_principal_types:
+        return True
+    if principal.principal_key in settings.admin_principal_keys:
+        return True
+    return False
+
+
 def hash_api_key(api_key: str) -> str:
     """Hash an API key for storage/lookup."""
     return hashlib.sha256(api_key.encode()).hexdigest()
@@ -155,3 +164,15 @@ async def get_authenticated_principal(
         )
 
     return authenticated
+
+
+async def require_admin(
+    auth: AuthenticatedPrincipal = Depends(get_authenticated_principal),
+) -> AuthenticatedPrincipal:
+    """Require admin privileges for sensitive endpoints."""
+    if not auth.principal or not is_admin_principal(auth.principal):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
+    return auth
