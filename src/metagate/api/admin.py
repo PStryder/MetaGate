@@ -15,6 +15,7 @@ from ..models.schemas import (
     SecretRefCreate, SecretRefResponse,
 )
 from ..services.bootstrap import FORBIDDEN_KEYS, check_forbidden_keys
+from ..auth.auth import AuthenticatedPrincipal, get_authenticated_principal
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/v1/admin", tags=["admin"])
 async def create_principal(
     data: PrincipalCreate,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Create a new principal."""
     principal = Principal(
@@ -47,6 +49,7 @@ async def create_principal(
 async def list_principals(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """List all principals for a tenant."""
     result = await db.execute(
@@ -59,6 +62,7 @@ async def list_principals(
 async def get_principal(
     principal_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Get a principal by ID."""
     result = await db.execute(
@@ -74,6 +78,7 @@ async def get_principal(
 async def delete_principal(
     principal_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Delete a principal."""
     result = await db.execute(
@@ -91,6 +96,7 @@ async def delete_principal(
 async def create_profile(
     data: ProfileCreate,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Create a new profile."""
     # Check for forbidden keys
@@ -120,6 +126,7 @@ async def create_profile(
 async def list_profiles(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """List all profiles for a tenant."""
     result = await db.execute(
@@ -132,6 +139,7 @@ async def list_profiles(
 async def get_profile(
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Get a profile by ID."""
     result = await db.execute(
@@ -147,6 +155,7 @@ async def get_profile(
 async def delete_profile(
     profile_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Delete a profile."""
     result = await db.execute(
@@ -164,6 +173,7 @@ async def delete_profile(
 async def create_manifest(
     data: ManifestCreate,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Create a new manifest."""
     # Check for forbidden keys
@@ -204,6 +214,7 @@ async def create_manifest(
 async def list_manifests(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """List all manifests for a tenant."""
     result = await db.execute(
@@ -216,6 +227,7 @@ async def list_manifests(
 async def get_manifest(
     manifest_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Get a manifest by ID."""
     result = await db.execute(
@@ -231,6 +243,7 @@ async def get_manifest(
 async def delete_manifest(
     manifest_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Delete a manifest."""
     result = await db.execute(
@@ -248,6 +261,7 @@ async def delete_manifest(
 async def create_binding(
     data: BindingCreate,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Create a new binding."""
     # Verify principal exists
@@ -306,6 +320,7 @@ async def create_binding(
 async def list_bindings(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """List all bindings for a tenant."""
     result = await db.execute(
@@ -318,6 +333,7 @@ async def list_bindings(
 async def get_binding(
     binding_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Get a binding by ID."""
     result = await db.execute(
@@ -333,6 +349,7 @@ async def get_binding(
 async def delete_binding(
     binding_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Delete a binding."""
     result = await db.execute(
@@ -350,6 +367,7 @@ async def delete_binding(
 async def create_secret_ref(
     data: SecretRefCreate,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Create a new secret reference."""
     if data.ref_kind not in ("env", "file"):
@@ -377,6 +395,7 @@ async def create_secret_ref(
 async def list_secret_refs(
     tenant_key: str = "default",
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """List all secret refs for a tenant."""
     result = await db.execute(
@@ -389,6 +408,7 @@ async def list_secret_refs(
 async def delete_secret_ref(
     secret_ref_id: UUID,
     db: AsyncSession = Depends(get_db),
+    _: AuthenticatedPrincipal = Depends(get_authenticated_principal),
 ):
     """Delete a secret reference."""
     result = await db.execute(
