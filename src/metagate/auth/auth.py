@@ -7,6 +7,9 @@ from sqlalchemy import select
 from datetime import datetime, timezone
 from typing import Optional
 import hashlib
+import secrets
+
+from passlib.hash import bcrypt
 
 from ..config import get_settings
 from ..database import get_db
@@ -48,7 +51,11 @@ def is_admin_principal(principal: Principal) -> bool:
 
 def hash_api_key(api_key: str) -> str:
     """Hash an API key for storage/lookup."""
-    return hashlib.sha256(api_key.encode()).hexdigest()
+    return bcrypt.hash(api_key)
+
+
+def _is_bcrypt_hash(value: str) -> bool:
+    return value.startswith("$2")
 
 
 async def verify_jwt(token: str, db: AsyncSession) -> Optional[AuthenticatedPrincipal]:
@@ -91,25 +98,41 @@ async def verify_jwt(token: str, db: AsyncSession) -> Optional[AuthenticatedPrin
 
 async def verify_api_key(api_key: str, db: AsyncSession) -> Optional[AuthenticatedPrincipal]:
     """Verify an API key and return the authenticated principal."""
-    key_hash = hash_api_key(api_key)
-
     result = await db.execute(
-        select(ApiKey).where(
-            ApiKey.key_hash == key_hash,
-            ApiKey.status == "active"
-        )
+        select(ApiKey).where(ApiKey.status == "active")
     )
-    api_key_record = result.scalar_one_or_none()
+    api_key_records = result.scalars().all()
+
+    now = datetime.now(timezone.utc)
+    legacy_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    api_key_record = None
+    upgrade_legacy = False
+
+    for record in api_key_records:
+        if record.expires_at and record.expires_at < now:
+            continue
+        if _is_bcrypt_hash(record.key_hash):
+            if bcrypt.verify(api_key, record.key_hash):
+                api_key_record = record
+                break
+        else:
+            if secrets.compare_digest(record.key_hash, legacy_hash):
+                api_key_record = record
+                upgrade_legacy = True
+                break
 
     if not api_key_record:
         return None
 
     # Check expiration
-    if api_key_record.expires_at and api_key_record.expires_at < datetime.now(timezone.utc):
+    if api_key_record.expires_at and api_key_record.expires_at < now:
         return None
 
+    if upgrade_legacy:
+        api_key_record.key_hash = hash_api_key(api_key)
+
     # Update last used timestamp (best effort, non-blocking)
-    api_key_record.last_used_at = datetime.now(timezone.utc)
+    api_key_record.last_used_at = now
     await db.commit()
 
     # Get principal
