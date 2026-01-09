@@ -1,6 +1,6 @@
 """Bootstrap service - core logic for bootstrap and welcome packet generation."""
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 import hashlib
@@ -81,7 +81,7 @@ async def get_active_binding(
         select(Binding)
         .where(
             Binding.principal_id == principal.id,
-            Binding.active == True
+            Binding.active.is_(True)
         )
         .limit(1)
     )
@@ -148,6 +148,25 @@ async def create_startup_session(
     return session
 
 
+
+async def cleanup_old_sessions(db: AsyncSession, retention_hours: int) -> int:
+    """
+    Clean up old startup sessions past retention period.
+
+    Only removes sessions that are in terminal states (READY/FAILED).
+    Returns the number of deleted sessions.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
+    result = await db.execute(
+        delete(StartupSession).where(
+            StartupSession.created_at < cutoff,
+            StartupSession.status.in_(["READY", "FAILED"])
+        )
+    )
+    await db.commit()
+    return result.rowcount
+
+
 async def perform_bootstrap(
     db: AsyncSession,
     principal: Principal,
@@ -183,6 +202,15 @@ async def perform_bootstrap(
     profile = result.scalar_one_or_none()
     if not profile:
         raise BootstrapError("Profile not found", status_code=500, code="PROFILE_NOT_FOUND")
+
+    # Validate component_key is permitted by profile (Spec Section 3.0)
+    allowed_components = profile.capabilities.get("allowed_components", [])
+    if allowed_components and component_key not in allowed_components:
+        raise BootstrapError(
+            f"Component '{component_key}' not permitted for principal '{principal.principal_key}'",
+            status_code=403,
+            code="COMPONENT_NOT_PERMITTED"
+        )
 
     result = await db.execute(select(Manifest).where(Manifest.id == binding.manifest_id))
     manifest = result.scalar_one_or_none()

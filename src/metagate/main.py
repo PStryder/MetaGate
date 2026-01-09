@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 
 from .config import get_settings
@@ -17,6 +18,8 @@ from .api.bootstrap import router as bootstrap_router
 from .api.startup import router as startup_router
 from .api.admin import router as admin_router
 from .middleware import get_rate_limiter
+from .services.bootstrap import cleanup_old_sessions
+from .database import AsyncSessionLocal
 
 settings = get_settings()
 
@@ -39,12 +42,40 @@ logging.basicConfig(
 logger = logging.getLogger("metagate")
 
 
+async def retention_cleanup_task():
+    """Background task that periodically cleans up old startup sessions."""
+    cleanup_interval = 3600  # Run every hour
+    while True:
+        try:
+            await asyncio.sleep(cleanup_interval)
+            async with AsyncSessionLocal() as db:
+                deleted = await cleanup_old_sessions(db, settings.receipt_retention_hours)
+                if deleted > 0:
+                    logger.info(f"Retention cleanup: deleted {deleted} old startup sessions")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Retention cleanup error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info(f"MetaGate v{settings.metagate_version} starting...")
     logger.info("MetaGate is the first flame. MetaGate is truth, not control.")
+    
+    # Start background cleanup task
+    cleanup_task = asyncio.create_task(retention_cleanup_task())
+    
     yield
+    
+    # Cancel cleanup task on shutdown
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    
     logger.info("MetaGate shutting down...")
 
 
