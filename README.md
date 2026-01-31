@@ -13,7 +13,7 @@ MetaGate is a non-blocking, describe-only bootstrap authority that provides worl
 - Authenticates callers
 - Resolves identity -> binding -> profile -> manifest
 - Returns a Welcome Packet describing the environment
-- Issues a startup OPEN receipt as a witness of bootstrap
+- Issues startup lifecycle receipts to ReceiptGate (when configured)
 
 ### What MetaGate Never Does
 
@@ -31,6 +31,9 @@ MetaGate is a non-blocking, describe-only bootstrap authority that provides worl
 ```bash
 # Start MetaGate and PostgreSQL
 docker-compose up -d
+
+# Or use the one-command script
+./run_local.sh
 
 # Check health
 curl http://localhost:8000/health
@@ -111,6 +114,9 @@ Environment variables:
 | `RECEIPT_RETENTION_HOURS` | `72` | Receipt retention period |
 | `DEFAULT_TENANT_KEY` | `default` | Default tenant key |
 | `DEFAULT_DEPLOYMENT_KEY` | `default` | Default deployment key |
+| `RECEIPTGATE_ENDPOINT` | (none) | ReceiptGate MCP endpoint |
+| `RECEIPTGATE_AUTH_TOKEN` | (none) | ReceiptGate auth token |
+| `RECEIPTGATE_EMIT_RECEIPTS` | `true` | Emit startup receipts to ReceiptGate |
 
 ## Core Concepts
 

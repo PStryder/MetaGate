@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     default_startup_sla_seconds: int = Field(default=120, description="Default startup SLA in seconds")
     receipt_retention_hours: int = Field(default=72, description="Receipt retention in hours")
 
+    # ReceiptGate integration
+    receiptgate_endpoint: str = Field(default="", description="ReceiptGate MCP endpoint")
+    receiptgate_auth_token: str = Field(default="", description="ReceiptGate auth token")
+    receiptgate_emit_receipts: bool = Field(
+        default=True,
+        description="Emit startup receipts to ReceiptGate",
+    )
+
     # Tenant defaults
     default_tenant_key: str = Field(default="default", description="Default tenant key")
     default_deployment_key: str = Field(default="default", description="Default deployment key")
@@ -101,6 +109,14 @@ class Settings(BaseSettings):
         debug = info.data.get("debug", False)
         if v == "change-me-in-production" and not debug:
             raise ValueError("jwt_secret must be changed from default value in production")
+        return v
+
+    @field_validator("receiptgate_endpoint")
+    @classmethod
+    def validate_receiptgate_endpoint(cls, v: str) -> str:
+        """Validate ReceiptGate endpoint if provided."""
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("receiptgate_endpoint must start with http:// or https://")
         return v
 
 

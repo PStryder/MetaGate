@@ -7,6 +7,7 @@ from typing import Optional, Any
 
 from ..models.db_models import StartupSession
 from ..models.schemas import StartupAckResponse
+from ..services.receipts import emit_startup_receipt
 
 
 class StartupError(Exception):
@@ -66,6 +67,14 @@ async def mark_startup_ready(
     await db.commit()
     await db.refresh(session)
 
+    await emit_startup_receipt(
+        session=session,
+        phase="complete",
+        status="success",
+        outcome_text=f"startup_ready:{build_version}",
+        completed_at=now,
+    )
+
     return StartupAckResponse(
         startup_id=session.id,
         status=session.status,
@@ -108,6 +117,14 @@ async def mark_startup_failed(
 
     await db.commit()
     await db.refresh(session)
+
+    await emit_startup_receipt(
+        session=session,
+        phase="complete",
+        status="failure",
+        outcome_text=f"startup_failed:{error}",
+        completed_at=now,
+    )
 
     return StartupAckResponse(
         startup_id=session.id,

@@ -10,6 +10,7 @@ from typing import Optional, Any
 from ..models.db_models import Principal, Binding, Profile, Manifest, StartupSession, SecretRef
 from ..models.schemas import WelcomePacket, StartupBlock
 from ..config import get_settings
+from ..services.receipts import emit_startup_receipt
 
 settings = get_settings()
 
@@ -285,6 +286,14 @@ async def perform_bootstrap(
     startup_session = await create_startup_session(
         db, principal, component_key, profile, manifest,
         packet_etag, packet_hash_redacted
+    )
+
+    await emit_startup_receipt(
+        session=startup_session,
+        phase="accepted",
+        status="NA",
+        outcome_text="NA",
+        completed_at=None,
     )
 
     # Build startup block
