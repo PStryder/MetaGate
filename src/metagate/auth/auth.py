@@ -51,7 +51,12 @@ def is_admin_principal(principal: Principal) -> bool:
 
 def hash_api_key(api_key: str) -> str:
     """Hash an API key for storage/lookup."""
-    return bcrypt.hash(api_key)
+    try:
+        return bcrypt.hash(api_key)
+    except Exception:
+        if settings.debug:
+            return hashlib.sha256(api_key.encode()).hexdigest()
+        raise
 
 
 def _is_bcrypt_hash(value: str) -> bool:

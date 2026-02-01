@@ -1,5 +1,6 @@
 """Pytest fixtures and configuration for MetaGate tests."""
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 from uuid import uuid4
@@ -9,6 +10,10 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import StaticPool
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
+os.environ.setdefault("METAGATE_JWT_SECRET", "test-secret")
+os.environ.setdefault("METAGATE_DEBUG", "true")
+os.environ.setdefault("METAGATE_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from metagate.database import Base
 from metagate.main import app

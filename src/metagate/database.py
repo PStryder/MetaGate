@@ -13,13 +13,20 @@ class Base(DeclarativeBase):
 
 settings = get_settings()
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-)
+engine_kwargs = {"echo": settings.debug}
+if settings.database_url.startswith(("sqlite://", "sqlite+aiosqlite://")):
+    engine = create_async_engine(
+        settings.database_url,
+        **engine_kwargs,
+    )
+else:
+    engine = create_async_engine(
+        settings.database_url,
+        **engine_kwargs,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+    )
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

@@ -1,5 +1,5 @@
 """SQLAlchemy ORM models."""
-from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, DateTime, Text, Enum
+from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, DateTime, Text, Enum, JSON
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -7,6 +7,8 @@ import uuid
 import enum
 
 from ..database import Base
+
+JSONType = JSON().with_variant(JSONB, "postgresql")
 
 
 class AuditAction(enum.Enum):
@@ -44,8 +46,8 @@ class Profile(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_key = Column(Text, default="default")
     profile_key = Column(Text, unique=True, nullable=False)
-    capabilities = Column(JSONB, nullable=False)
-    policy = Column(JSONB, nullable=False)
+    capabilities = Column(JSONType, nullable=False)
+    policy = Column(JSONType, nullable=False)
     startup_sla_seconds = Column(Integer, default=120)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -63,11 +65,11 @@ class Manifest(Base):
     tenant_key = Column(Text, default="default")
     manifest_key = Column(Text, unique=True, nullable=False)
     deployment_key = Column(Text, default="default")
-    environment = Column(JSONB, nullable=False)
-    services = Column(JSONB, nullable=False)
-    memory_map = Column(JSONB, nullable=False)
-    polling = Column(JSONB, nullable=False)
-    schemas = Column(JSONB, nullable=False)
+    environment = Column(JSONType, nullable=False)
+    services = Column(JSONType, nullable=False)
+    memory_map = Column(JSONType, nullable=False)
+    polling = Column(JSONType, nullable=False)
+    schemas = Column(JSONType, nullable=False)
     version = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -86,7 +88,7 @@ class Binding(Base):
     principal_id = Column(UUID(as_uuid=True), ForeignKey("principals.id", ondelete="CASCADE"))
     profile_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"))
     manifest_id = Column(UUID(as_uuid=True), ForeignKey("manifests.id", ondelete="CASCADE"))
-    overrides = Column(JSONB)
+    overrides = Column(JSONType)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -107,7 +109,7 @@ class SecretRef(Base):
     secret_key = Column(Text, unique=True, nullable=False)
     ref_kind = Column(Text, default="env")
     ref_name = Column(Text, nullable=False)
-    ref_meta = Column(JSONB)
+    ref_meta = Column(JSONType)
     status = Column(Text, default="active")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     created_by = Column(Text, nullable=True)
@@ -132,8 +134,8 @@ class StartupSession(Base):
     deadline_at = Column(DateTime(timezone=True))
     ready_at = Column(DateTime(timezone=True))
     failed_at = Column(DateTime(timezone=True))
-    ready_payload = Column(JSONB)
-    failure_payload = Column(JSONB)
+    ready_payload = Column(JSONType)
+    failure_payload = Column(JSONType)
     mirror_status = Column(Text, default="PENDING")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -175,5 +177,5 @@ class AuditLog(Base):
     actor_principal_key = Column(Text, nullable=False)
     actor_ip = Column(Text, nullable=True)
     actor_user_agent = Column(Text, nullable=True)
-    changes = Column(JSONB, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    changes = Column(JSONType, nullable=True)
+    metadata_ = Column("metadata", JSONType, nullable=True)

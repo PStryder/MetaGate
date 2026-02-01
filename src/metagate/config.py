@@ -1,6 +1,7 @@
 """Configuration management for MetaGate."""
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, ValidationInfo
 from typing import Optional
 from functools import lru_cache
 
@@ -88,8 +89,12 @@ class Settings(BaseSettings):
     # Validators
     @field_validator("database_url")
     @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        """Validate PostgreSQL database URL format."""
+    def validate_database_url(cls, v: str, info: ValidationInfo) -> str:
+        """Validate database URL format."""
+        debug = info.data.get("debug", False)
+        debug_env = os.getenv("METAGATE_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+        if (debug or debug_env) and v.startswith(("sqlite://", "sqlite+aiosqlite://")):
+            return v
         if not v.startswith(("postgresql://", "postgresql+asyncpg://")):
             raise ValueError("database_url must be a PostgreSQL URL (postgresql:// or postgresql+asyncpg://)")
         return v

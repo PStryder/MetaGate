@@ -61,7 +61,7 @@ async def record_audit(
         actor_ip=actor_ip,
         actor_user_agent=actor_user_agent,
         changes=changes,
-        metadata=metadata,
+        metadata_=metadata,
     )
 
     db.add(audit_entry)

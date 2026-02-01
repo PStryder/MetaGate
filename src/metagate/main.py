@@ -13,10 +13,15 @@ import asyncio
 
 from .config import get_settings
 from .logging import configure_logging, get_logger, set_trace_id
+from .api.admin import router as admin_router
+from .api.bootstrap import router as bootstrap_router
+from .api.discovery import router as discovery_router
+from .api.startup import router as startup_router
 from .mcp.routes import router as mcp_router
 from .middleware import get_rate_limiter
 from .services.bootstrap import cleanup_old_sessions
 from .database import AsyncSessionLocal
+from .models.schemas import HealthResponse
 
 settings = get_settings()
 
@@ -155,5 +160,29 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Include MCP router (with rate limiting)
+@app.get("/health", response_model=HealthResponse, tags=["health"])
+async def health() -> HealthResponse:
+    """Basic health check endpoint."""
+    return HealthResponse(
+        status="healthy",
+        version=settings.metagate_version,
+        instance_id=settings.instance_id,
+    )
+
+
+@app.get("/", tags=["root"])
+async def root() -> dict[str, str]:
+    """Root endpoint with service info."""
+    return {
+        "service": "MetaGate",
+        "version": settings.metagate_version,
+        "doctrine": "MetaGate is the first flame. MetaGate is truth, not control.",
+    }
+
+
+# Include API routers (with rate limiting)
+app.include_router(admin_router, dependencies=[Depends(rate_limit_dependency)])
+app.include_router(bootstrap_router, dependencies=[Depends(rate_limit_dependency)])
+app.include_router(discovery_router, dependencies=[Depends(rate_limit_dependency)])
+app.include_router(startup_router, dependencies=[Depends(rate_limit_dependency)])
 app.include_router(mcp_router, dependencies=[Depends(rate_limit_dependency)])
