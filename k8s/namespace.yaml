@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: metagate
+  labels:
+    app.kubernetes.io/name: metagate
+    app.kubernetes.io/component: bootstrap-authority

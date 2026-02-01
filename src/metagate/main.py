@@ -10,18 +10,18 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
-import logging
 
 from .config import get_settings
-from .api.discovery import router as discovery_router
-from .api.bootstrap import router as bootstrap_router
-from .api.startup import router as startup_router
-from .api.admin import router as admin_router
+from .logging import configure_logging, get_logger, set_trace_id
+from .mcp.routes import router as mcp_router
 from .middleware import get_rate_limiter
 from .services.bootstrap import cleanup_old_sessions
 from .database import AsyncSessionLocal
 
 settings = get_settings()
+
+# Configure structured logging
+logger = configure_logging()
 
 
 # Rate limiting dependency
@@ -34,14 +34,6 @@ async def rate_limit_dependency(request: Request) -> None:
     await limiter.check_request(request)
 
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger("metagate")
-
-
 async def retention_cleanup_task():
     """Background task that periodically cleans up old startup sessions."""
     cleanup_interval = 3600  # Run every hour
@@ -51,32 +43,42 @@ async def retention_cleanup_task():
             async with AsyncSessionLocal() as db:
                 deleted = await cleanup_old_sessions(db, settings.receipt_retention_hours)
                 if deleted > 0:
-                    logger.info(f"Retention cleanup: deleted {deleted} old startup sessions")
+                    logger.info(
+                        "retention_cleanup_completed",
+                        deleted_sessions=deleted,
+                        retention_hours=settings.receipt_retention_hours,
+                    )
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error(f"Retention cleanup error: {e}")
+            logger.error("retention_cleanup_error", error=str(e), exc_info=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
-    logger.info(f"MetaGate v{settings.metagate_version} starting...")
-    logger.info("MetaGate is the first flame. MetaGate is truth, not control.")
-    
+    logger.info(
+        "metagate_starting",
+        version=settings.metagate_version,
+        debug=settings.debug,
+        host=settings.host,
+        port=settings.port,
+    )
+    logger.info("metagate_motto", message="MetaGate is the first flame. MetaGate is truth, not control.")
+
     # Start background cleanup task
     cleanup_task = asyncio.create_task(retention_cleanup_task())
-    
+
     yield
-    
+
     # Cancel cleanup task on shutdown
     cleanup_task.cancel()
     try:
         await cleanup_task
     except asyncio.CancelledError:
         pass
-    
-    logger.info("MetaGate shutting down...")
+
+    logger.info("metagate_shutdown", version=settings.metagate_version)
 
 
 app = FastAPI(
@@ -121,40 +123,37 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    """Add trace ID to each request for distributed tracing."""
+    # Check for incoming trace ID from headers (e.g., X-Request-ID, X-Trace-ID)
+    trace_id = request.headers.get("x-trace-id") or request.headers.get("x-request-id")
+    trace_id = set_trace_id(trace_id)
+
+    response = await call_next(request)
+
+    # Add trace ID to response headers
+    response.headers["x-trace-id"] = trace_id
+    return response
+
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.exception(f"Unhandled exception: {exc}")
+    logger.exception(
+        "unhandled_exception",
+        error=str(exc),
+        path=request.url.path,
+        method=request.method,
+    )
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal server error", "detail": str(exc)},
+        content={
+            "error": "Internal server error",
+            "detail": str(exc) if settings.debug else None,
+        },
     )
 
 
-# Include routers (with rate limiting)
-app.include_router(discovery_router, dependencies=[Depends(rate_limit_dependency)])
-app.include_router(bootstrap_router, dependencies=[Depends(rate_limit_dependency)])
-app.include_router(startup_router, dependencies=[Depends(rate_limit_dependency)])
-app.include_router(admin_router, dependencies=[Depends(rate_limit_dependency)])
-
-
-@app.get("/health", tags=["health"])
-async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "MetaGate",
-        "version": settings.metagate_version,
-        "instance_id": settings.instance_id
-    }
-
-
-@app.get("/", tags=["root"])
-async def root():
-    """Root endpoint with basic info."""
-    return {
-        "service": "MetaGate",
-        "version": settings.metagate_version,
-        "doctrine": "MetaGate is truth, not control.",
-        "discovery": "/.well-known/metagate.json",
-    }
+# Include MCP router (with rate limiting)
+app.include_router(mcp_router, dependencies=[Depends(rate_limit_dependency)])

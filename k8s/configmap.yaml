@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: metagate-config
+  namespace: metagate
+  labels:
+    app.kubernetes.io/name: metagate
+    app.kubernetes.io/component: bootstrap-authority
+data:
+  # Server configuration
+  METAGATE_HOST: "0.0.0.0"
+  METAGATE_PORT: "8000"
+  METAGATE_DEBUG: "false"
+  METAGATE_INSTANCE_ID: "metagate-k8s"
+
+  # MetaGate configuration
+  METAGATE_VERSION: "0.1"
+  METAGATE_DEFAULT_STARTUP_SLA_SECONDS: "120"
+  METAGATE_RECEIPT_RETENTION_HOURS: "72"
+
+  # Tenant defaults
+  METAGATE_DEFAULT_TENANT_KEY: "default"
+  METAGATE_DEFAULT_DEPLOYMENT_KEY: "default"
+
+  # JWT configuration (algorithm only - secret in Secret)
+  METAGATE_JWT_ALGORITHM: "HS256"
+
+  # Rate limiting
+  METAGATE_RATE_LIMIT_ENABLED: "true"
+  METAGATE_RATE_LIMIT_REQUESTS_PER_MINUTE: "100"
+
+  # CORS configuration (adjust for your environment)
+  METAGATE_CORS_ALLOWED_ORIGINS: '["https://your-domain.com"]'
+  METAGATE_CORS_ALLOW_CREDENTIALS: "true"
+  METAGATE_CORS_ALLOWED_METHODS: '["GET", "POST", "PUT", "DELETE", "OPTIONS"]'
+  METAGATE_CORS_ALLOWED_HEADERS: '["Authorization", "Content-Type", "X-Tenant-ID", "X-Trace-ID"]'

@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: metagate
+  namespace: metagate
+  labels:
+    app.kubernetes.io/name: metagate
+    app.kubernetes.io/component: bootstrap-authority
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: metagate
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metagate-postgresql
+  namespace: metagate
+  labels:
+    app.kubernetes.io/name: metagate
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: metagate-postgresql

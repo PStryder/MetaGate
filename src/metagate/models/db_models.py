@@ -1,11 +1,21 @@
 """SQLAlchemy ORM models."""
-from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, DateTime, Text
+from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, DateTime, Text, Enum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
+import enum
 
 from ..database import Base
+
+
+class AuditAction(enum.Enum):
+    """Audit action types for tracking operations."""
+    CREATE = "CREATE"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+    ACTIVATE = "ACTIVATE"
+    DEACTIVATE = "DEACTIVATE"
 
 
 class Principal(Base):
@@ -20,6 +30,8 @@ class Principal(Base):
     status = Column(Text, nullable=False, default="active")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Text, nullable=True)
+    updated_by = Column(Text, nullable=True)
 
     bindings = relationship("Binding", back_populates="principal")
     api_keys = relationship("ApiKey", back_populates="principal")
@@ -37,6 +49,8 @@ class Profile(Base):
     startup_sla_seconds = Column(Integer, default=120)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Text, nullable=True)
+    updated_by = Column(Text, nullable=True)
 
     bindings = relationship("Binding", back_populates="profile")
 
@@ -57,6 +71,8 @@ class Manifest(Base):
     version = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Text, nullable=True)
+    updated_by = Column(Text, nullable=True)
 
     bindings = relationship("Binding", back_populates="manifest")
 
@@ -74,6 +90,8 @@ class Binding(Base):
     active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Text, nullable=True)
+    updated_by = Column(Text, nullable=True)
 
     principal = relationship("Principal", back_populates="bindings")
     profile = relationship("Profile", back_populates="bindings")
@@ -92,6 +110,8 @@ class SecretRef(Base):
     ref_meta = Column(JSONB)
     status = Column(Text, default="active")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(Text, nullable=True)
+    updated_by = Column(Text, nullable=True)
 
 
 class StartupSession(Base):
@@ -132,5 +152,28 @@ class ApiKey(Base):
     last_used_at = Column(DateTime(timezone=True))
     expires_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(Text, nullable=True)
 
     principal = relationship("Principal", back_populates="api_keys")
+
+
+class AuditLog(Base):
+    """Audit log for tracking security-sensitive operations.
+
+    Records who did what, when, and on which resource. This provides
+    an immutable accountability trail for security-sensitive changes.
+    """
+    __tablename__ = "audit_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_key = Column(Text, default="default", nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    action = Column(Text, nullable=False)
+    resource_type = Column(Text, nullable=False)
+    resource_id = Column(UUID(as_uuid=True), nullable=False)
+    resource_key = Column(Text, nullable=True)
+    actor_principal_key = Column(Text, nullable=False)
+    actor_ip = Column(Text, nullable=True)
+    actor_user_agent = Column(Text, nullable=True)
+    changes = Column(JSONB, nullable=True)
+    metadata = Column(JSONB, nullable=True)
