@@ -23,21 +23,21 @@ class HealthResponse(BaseModel):
 
 # Request schemas
 class BootstrapRequest(BaseModel):
-    """Request body for POST /v1/bootstrap."""
+    """Request body for metagate.bootstrap MCP tool."""
     component_key: str = Field(..., description="The component being instantiated")
     principal_key: Optional[str] = Field(None, description="Optional principal hint")
     last_packet_etag: Optional[str] = Field(None, description="ETag for caching")
 
 
 class StartupReadyRequest(BaseModel):
-    """Request body for POST /v1/startup/ready."""
+    """Request body for metagate.startup_ready MCP tool."""
     startup_id: UUID = Field(..., description="Startup session ID")
     build_version: str = Field(..., description="Build version of the component")
     health: Optional[str] = Field(None, description="Optional health summary")
 
 
 class StartupFailedRequest(BaseModel):
-    """Request body for POST /v1/startup/failed."""
+    """Request body for metagate.startup_failed MCP tool."""
     startup_id: UUID = Field(..., description="Startup session ID")
     error: str = Field(..., description="Error message")
     details: Optional[dict[str, Any]] = Field(default_factory=dict)
@@ -45,7 +45,7 @@ class StartupFailedRequest(BaseModel):
 
 # Response schemas
 class DiscoveryResponse(BaseModel):
-    """Response for GET /.well-known/metagate.json."""
+    """Response for metagate.discovery MCP tool."""
     metagate_version: str
     bootstrap_endpoint: str
     supported_auth: list[str]
@@ -57,8 +57,8 @@ class StartupBlock(BaseModel):
     status: str = "OPEN"
     deadline_at: datetime
     followup: list[str] = [
-        "POST /v1/startup/ready",
-        "POST /v1/startup/failed"
+        "metagate.startup_ready",
+        "metagate.startup_failed",
     ]
 
 

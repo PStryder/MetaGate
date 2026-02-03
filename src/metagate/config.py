@@ -36,11 +36,11 @@ class Settings(BaseSettings):
     api_key_header: str = Field(default="X-API-Key", description="API key header name")
     admin_principal_types: list[str] = Field(
         default=["admin"],
-        description="Principal types allowed to access admin endpoints"
+        description="Principal types allowed to access admin tools"
     )
     admin_principal_keys: list[str] = Field(
         default_factory=list,
-        description="Explicit principal keys allowed to access admin endpoints"
+        description="Explicit principal keys allowed to access admin tools"
     )
     admin_allow_cross_tenant: bool = Field(
         default=False,

@@ -1,3 +1,5 @@
+LEGACY NOTE (2026-02-03): MetaGate is MCP-only. REST endpoint references in this spec are historical.
+
 MetaGate v0 Specification
 
 Meta configuration authority and bootstrap witness for LegiVellum-compatible systems

@@ -58,10 +58,10 @@ def main():
     print(f"\nToken:")
     print(f"  {token}")
     print("\nTest bootstrap with:")
-    print(f'  curl -X POST http://localhost:8000/v1/bootstrap \\')
+    print(f'  curl -X POST http://localhost:8000/mcp \\')
     print(f'    -H "Authorization: Bearer {token}" \\')
     print(f'    -H "Content-Type: application/json" \\')
-    print(f'    -d \'{{"component_key": "memorygate_main"}}\'')
+    print('    -d \'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"metagate.bootstrap","arguments":{"component_key":"memorygate_main"}}}\'')
     print("="*60)
 
 

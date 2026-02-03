@@ -35,7 +35,7 @@ from metagate.models.schemas import (
 )
 from metagate.services.bootstrap import BootstrapError, ForbiddenKeyError, perform_bootstrap
 from metagate.services.startup import StartupError, mark_startup_failed, mark_startup_ready
-from metagate.api.admin import apply_tenant_scope, resolve_tenant_key
+from metagate.tenancy import apply_tenant_scope, resolve_tenant_key
 
 
 class MCPRequest(BaseModel):

@@ -74,7 +74,7 @@ async def main():
             "primary": {"gate": "memorygate", "namespace": "default"},
         }
         polling = {
-            "asyncgate": {"endpoint": "/v1/poll", "interval_ms": 1000},
+            "asyncgate": {"endpoint": "/mcp", "interval_ms": 1000},
         }
         schemas = {
             "memory_schema_version": "1.0",
@@ -129,10 +129,10 @@ async def main():
         print(f"\nAPI Key (save this - shown only once):")
         print(f"  {api_key}")
         print("\nTest bootstrap with:")
-        print(f'  curl -X POST http://localhost:8000/v1/bootstrap \\')
+        print(f'  curl -X POST http://localhost:8000/mcp \\')
         print(f'    -H "X-API-Key: {api_key}" \\')
         print(f'    -H "Content-Type: application/json" \\')
-        print(f'    -d \'{{"component_key": "memorygate_main"}}\'')
+        print('    -d \'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"metagate.bootstrap","arguments":{"component_key":"memorygate_main"}}}\'')
         print("="*60)
 
     finally:
