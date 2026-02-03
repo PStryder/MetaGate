@@ -81,6 +81,9 @@ async def client(test_engine) -> AsyncGenerator[AsyncClient, None]:
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    # MCP routes use AsyncSessionLocal directly, so patch it to the test sessionmaker.
+    import metagate.mcp.routes as mcp_routes
+    mcp_routes.AsyncSessionLocal = TestSessionLocal
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

@@ -36,10 +36,14 @@ docker-compose up -d
 ./run_local.sh
 
 # Check health
-curl http://localhost:8000/health
+curl -s http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"metagate.health","arguments":{}}}'
 
-# View discovery endpoint
-curl http://localhost:8000/.well-known/metagate.json
+# View discovery info
+curl -s http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"metagate.discovery","arguments":{}}}'
 ```
 
 ### Seed Test Data
@@ -58,42 +62,39 @@ The seed script will output an API key you can use for testing.
 
 ```bash
 # Using API Key (from seed script output)
-curl -X POST http://localhost:8000/v1/bootstrap \
+curl -X POST http://localhost:8000/mcp \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"component_key": "memorygate_main"}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"metagate.bootstrap","arguments":{"component_key":"memorygate_main"}}}'
 
 # Using JWT
 python scripts/generate_jwt.py test-subject-001
 # Use the token from the output
-curl -X POST http://localhost:8000/v1/bootstrap \
+curl -X POST http://localhost:8000/mcp \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"component_key": "memorygate_main"}'
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"metagate.bootstrap","arguments":{"component_key":"memorygate_main"}}}'
 ```
 
-## API Endpoints
+## MCP Tools
 
-### Discovery
-- `GET /.well-known/metagate.json` - Service discovery
+MetaGate exposes MCP over HTTP at `/mcp` with JSON-RPC methods:
+- `tools/list`
+- `tools/call`
 
-### Bootstrap
-- `POST /v1/bootstrap` - Bootstrap a component, returns Welcome Packet
+**Core tools:**
+- `metagate.discovery` - Service discovery
+- `metagate.health` - Health check / service info
+- `metagate.bootstrap` - Bootstrap a component, returns Welcome Packet
+- `metagate.startup_ready` - Component reports successful initialization
+- `metagate.startup_failed` - Component reports startup failure
 
-### Startup Lifecycle
-- `POST /v1/startup/ready` - Component reports successful initialization
-- `POST /v1/startup/failed` - Component reports startup failure
-
-### Admin (CRUD)
-- `POST/GET/DELETE /v1/admin/principals` - Manage principals
-- `POST/GET/DELETE /v1/admin/profiles` - Manage profiles
-- `POST/GET/DELETE /v1/admin/manifests` - Manage manifests
-- `POST/GET/DELETE /v1/admin/bindings` - Manage bindings
-- `POST/GET/DELETE /v1/admin/secret-refs` - Manage secret references
-
-### Health
-- `GET /health` - Health check
-- `GET /` - Root info
+**Admin tools:**
+- `metagate.admin_principals` - Manage principals
+- `metagate.admin_profiles` - Manage profiles
+- `metagate.admin_manifests` - Manage manifests
+- `metagate.admin_bindings` - Manage bindings
+- `metagate.admin_secret_refs` - Manage secret references
 
 ## Configuration
 
@@ -158,8 +159,8 @@ Ties: `principal -> profile + manifest (+ overrides)`. Exactly one active bindin
     "status": "OPEN",
     "deadline_at": "timestamp",
     "followup": [
-      "POST /v1/startup/ready",
-      "POST /v1/startup/failed"
+      "metagate.startup_ready",
+      "metagate.startup_failed"
     ]
   }
 }
