@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models."""
-from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, DateTime, Text, Enum, JSON
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, DateTime, Text, Enum, JSON, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
