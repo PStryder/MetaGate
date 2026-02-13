@@ -174,12 +174,12 @@ async def perform_bootstrap(
     component_key: str,
     principal_key_hint: Optional[str],
     last_packet_etag: Optional[str],
-) -> tuple[WelcomePacket, bool]:
+) -> tuple[WelcomePacket | None, bool]:
     """
     Perform the bootstrap operation.
 
     Returns:
-        Tuple of (WelcomePacket, is_cached) where is_cached indicates 304 response
+        Tuple of (WelcomePacket | None, is_cached) where is_cached indicates 304 response
     """
     # Verify principal_key hint if provided
     if principal_key_hint and principal_key_hint != principal.principal_key:
