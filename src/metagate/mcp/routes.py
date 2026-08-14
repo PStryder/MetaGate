@@ -34,6 +34,7 @@ from metagate.models.schemas import (
     SecretRefResponse,
 )
 from metagate.services.bootstrap import BootstrapError, ForbiddenKeyError, perform_bootstrap
+from metagate.services.problemata import instantiate_problemata
 from metagate.services.startup import StartupError, mark_startup_failed, mark_startup_ready
 from metagate.tenancy import apply_tenant_scope, resolve_tenant_key
 
@@ -122,6 +123,31 @@ MCP_TOOLS = [
         "name": "metagate.admin_manifests",
         "description": "Manage manifests",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "metagate.instantiate_problemata",
+        "description": (
+            "Materialize a validated Problemata spec as world-truth "
+            "(principal, profile, manifest, binding). Describe-only: does not "
+            "deploy, provision or execute anything."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "spec": {"type": "object", "description": "Compiled Problemata spec"},
+                "validation": {
+                    "type": "object",
+                    "description": "Validation attestation; status must be 'passed'",
+                },
+                "deployment_key": {"type": "string"},
+                "tenant_key": {"type": "string"},
+                "auth_subject": {
+                    "type": "string",
+                    "description": "Auth subject for the owner principal, if it must be created",
+                },
+            },
+            "required": ["spec", "validation"],
+        },
     },
     {
         "name": "metagate.admin_bindings",
@@ -499,6 +525,21 @@ async def _handle_tool(name: str, arguments: dict[str, Any], request: Request) -
                 return response.model_dump()
             except StartupError as exc:
                 raise ValueError(exc.message)
+
+        # Materializing a Problemata creates principals, profiles, manifests and
+        # bindings, so it carries the same privilege as the admin surfaces even
+        # though it is not named metagate.admin_*.
+        if name == "metagate.instantiate_problemata":
+            if not auth.principal or not is_admin_principal(auth.principal):
+                raise ValueError("Admin privileges required")
+            return await instantiate_problemata(
+                db,
+                spec=arguments.get("spec") or {},
+                validation=arguments.get("validation"),
+                tenant_key=resolve_tenant_key(auth, arguments.get("tenant_key")),
+                deployment_key=arguments.get("deployment_key") or "default",
+                auth_subject=arguments.get("auth_subject"),
+            )
 
         if name.startswith("metagate.admin_"):
             if not auth.principal or not is_admin_principal(auth.principal):

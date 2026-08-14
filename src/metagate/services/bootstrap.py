@@ -43,14 +43,30 @@ class ForbiddenKeyError(BootstrapError):
 
 
 def check_forbidden_keys(data: dict[str, Any], path: str = "") -> set[str]:
-    """Recursively check for forbidden keys in a dict."""
+    """Recursively check for forbidden keys in a dict.
+
+    Descends through lists as well as dicts: Problemata specs carry topology as
+    a list of edge objects, so a forbidden key one level inside a list would
+    otherwise slip past the describe-only guard.
+    """
     found = set()
     for key, value in data.items():
+        child_path = f"{path}.{key}" if path else key
         if key.lower() in FORBIDDEN_KEYS:
-            found.add(f"{path}.{key}" if path else key)
-        if isinstance(value, dict):
-            found.update(check_forbidden_keys(value, f"{path}.{key}" if path else key))
+            found.add(child_path)
+        found.update(_check_forbidden_value(value, child_path))
     return found
+
+
+def _check_forbidden_value(value: Any, path: str) -> set[str]:
+    if isinstance(value, dict):
+        return check_forbidden_keys(value, path)
+    if isinstance(value, (list, tuple)):
+        found: set[str] = set()
+        for index, item in enumerate(value):
+            found.update(_check_forbidden_value(item, f"{path}[{index}]"))
+        return found
+    return set()
 
 
 def generate_etag(data: dict[str, Any]) -> str:
