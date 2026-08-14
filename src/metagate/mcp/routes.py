@@ -35,6 +35,7 @@ from metagate.models.schemas import (
 )
 from metagate.services.bootstrap import BootstrapError, ForbiddenKeyError, perform_bootstrap
 from metagate.services.problemata import instantiate_problemata
+from metagate.services.api_keys import ApiKeyError, issue_api_key, list_api_keys, revoke_api_key
 from metagate.services.startup import StartupError, mark_startup_failed, mark_startup_ready
 from metagate.tenancy import apply_tenant_scope, resolve_tenant_key
 
@@ -153,6 +154,27 @@ MCP_TOOLS = [
         "name": "metagate.admin_bindings",
         "description": "Manage bindings",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "metagate.admin_api_keys",
+        "description": (
+            "Issue, list or revoke API keys for principals. An issued key is "
+            "returned once and never stored in plaintext."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["issue", "list", "revoke"]},
+                "principal_key": {"type": "string"},
+                "principal_id": {"type": "string"},
+                "name": {"type": "string", "description": "Human label for the key"},
+                "expires_in_days": {"type": "integer", "description": "Optional expiry"},
+                "api_key_id": {"type": "string", "description": "Required for revoke"},
+                "include_revoked": {"type": "boolean"},
+                "tenant_key": {"type": "string"},
+            },
+            "required": ["action"],
+        },
     },
     {
         "name": "metagate.admin_secret_refs",
@@ -421,6 +443,45 @@ async def _handle_admin_bindings(db, auth: AuthenticatedPrincipal, arguments: di
     raise ValueError(f"Unsupported action: {action}")
 
 
+async def _handle_admin_api_keys(db, auth: AuthenticatedPrincipal, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Issue, list or revoke API keys.
+
+    Errors are re-raised as ValueError so the MCP layer renders them as a
+    JSON-RPC error envelope rather than a 500.
+    """
+    action = arguments.get("action", "list")
+    tenant_key = resolve_tenant_key(auth, arguments.get("tenant_key"))
+    actor = auth.principal.principal_key if auth.principal else None
+
+    try:
+        if action == "issue":
+            return await issue_api_key(
+                db,
+                tenant_key=tenant_key,
+                principal_key=arguments.get("principal_key"),
+                principal_id=arguments.get("principal_id"),
+                name=arguments.get("name"),
+                expires_in_days=arguments.get("expires_in_days"),
+                created_by=actor,
+            )
+        if action == "list":
+            return await list_api_keys(
+                db,
+                tenant_key=tenant_key,
+                principal_key=arguments.get("principal_key"),
+                include_revoked=bool(arguments.get("include_revoked", False)),
+            )
+        if action == "revoke":
+            api_key_id = arguments.get("api_key_id")
+            if not api_key_id:
+                raise ValueError("api_key_id is required for revoke")
+            return await revoke_api_key(db, tenant_key=tenant_key, api_key_id=api_key_id)
+    except ApiKeyError as exc:
+        raise ValueError(exc.message)
+
+    raise ValueError(f"Unknown action: {action}")
+
+
 async def _handle_admin_secret_refs(db, auth: AuthenticatedPrincipal, arguments: dict[str, Any]) -> dict[str, Any]:
     action = arguments.get("action", "list")
     if action == "create":
@@ -553,6 +614,8 @@ async def _handle_tool(name: str, arguments: dict[str, Any], request: Request) -
                 return await _handle_admin_manifests(db, auth, arguments)
             if name == "metagate.admin_bindings":
                 return await _handle_admin_bindings(db, auth, arguments)
+            if name == "metagate.admin_api_keys":
+                return await _handle_admin_api_keys(db, auth, arguments)
             if name == "metagate.admin_secret_refs":
                 return await _handle_admin_secret_refs(db, auth, arguments)
 
