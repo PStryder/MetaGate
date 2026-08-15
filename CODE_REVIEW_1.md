@@ -1,3 +1,11 @@
+> **LEGACY NOTE (2026-08-15).** This is a point-in-time review from 2026-01-08,
+> kept as a record of what was found then. It is not current guidance.
+>
+> File paths in it no longer resolve: the REST `api/` layer it reviews
+> (`api/discovery.py`, `api/bootstrap.py`, `api/startup.py`, `api/admin.py`)
+> has collapsed into a single MCP surface at `src/metagate/mcp/routes.py`, with
+> the logic in `src/metagate/services/`. MetaGate is MCP-only.
+
 # MetaGate v0 - Comprehensive Code Review
 
 **Review Date:** January 8, 2026
