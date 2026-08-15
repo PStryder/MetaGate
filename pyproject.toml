@@ -31,6 +31,10 @@ dependencies = [
     "structlog>=24.1.0",
     "aiosqlite>=0.19.0",
     "python-multipart>=0.0.6",
+    # Canonical receipt protocol. Hard dependency: this gate must not be able
+    # to start without the validator, and must never fall back to posting
+    # unvalidated dictionaries to the ledger.
+    "legivellum",
 ]
 
 [project.optional-dependencies]
@@ -67,3 +71,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# legivellum is the sibling protocol package, not published to an index.
+[tool.uv.sources]
+legivellum = { path = "../LegiVellum", editable = true }

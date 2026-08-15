@@ -13,19 +13,13 @@ from ..models.db_models import StartupSession
 from ..receiptgate_client import emit_receipt
 from ..logging import get_logger
 
-try:
-    from legivellum.models import Receipt as CanonicalReceipt
-except ImportError:
-    CanonicalReceipt = None
-    for parent in Path(__file__).resolve().parents:
-        shared_root = parent / "LegiVellum" / "shared"
-        if shared_root.exists():
-            sys.path.append(str(shared_root))
-            try:
-                from legivellum.models import Receipt as CanonicalReceipt
-            except ImportError:
-                CanonicalReceipt = None
-            break
+from legivellum.ulid import derive_ulid
+
+# Hard dependency, imported unguarded. The parent-directory walk this replaces
+# found LegiVellum/shared in a checkout and nothing in a container, so
+# CanonicalReceipt was None in every deployment and this module posted
+# unvalidated dictionaries whose rejections were logged and dropped.
+from legivellum.models import Receipt as CanonicalReceipt
 
 
 logger = get_logger(__name__)
@@ -90,6 +84,9 @@ def build_startup_receipt(
         "tenant_id": session.tenant_key or "default",
         "receipt_id": str(uuid4()),
         "task_id": task_id,
+        # One startup session is one obligation: accepted when the component
+        # reports starting, complete when it reports ready or failed.
+        "obligation_id": derive_ulid("metagate.startup", task_id),
         "parent_task_id": "NA",
         "caused_by_receipt_id": "NA",
         "dedupe_key": f"startup:{session.id}:{phase}",
@@ -134,14 +131,12 @@ def build_startup_receipt(
         },
     }
 
-    if CanonicalReceipt is None:
-        return base
-
-    try:
-        return CanonicalReceipt.model_validate(base).model_dump(mode="json")
-    except Exception as exc:
-        logger.warning("startup_receipt_validation_failed", error=str(exc))
-        return base
+    # No fallback. This previously logged the validation error at WARNING and
+    # returned the unvalidated dict anyway, so an invalid receipt was posted to
+    # the ledger, rejected there, and that rejection was dropped too. A receipt
+    # that does not conform is a bug in this builder, and the builder is where
+    # it should surface.
+    return CanonicalReceipt.model_validate(base).model_dump(mode="json")
 
 
 async def emit_startup_receipt(
