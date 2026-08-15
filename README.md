@@ -102,26 +102,69 @@ MetaGate exposes MCP over HTTP at `/mcp` with JSON-RPC methods:
 
 ## Configuration
 
-Environment variables:
+Environment variables (prefix `METAGATE_`). Generated from the `Settings`
+class; MetaGate bootstrap variables are documented in their own section below.
+
+### Server
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://metagate:metagate@db:5432/metagate` | Database connection |
-| `HOST` | `0.0.0.0` | Server bind address |
-| `PORT` | `8000` | Server port |
-| `DEBUG` | `false` | Enable debug logging |
-| `JWT_SECRET` | `change-me-in-production` | JWT signing secret |
-| `JWT_ALGORITHM` | `HS256` | JWT algorithm |
-| `JWT_ISSUER` | (none) | Optional JWT issuer validation |
-| `API_KEY_HEADER` | `X-API-Key` | API key header name |
-| `METAGATE_VERSION` | `0.1` | API version |
-| `DEFAULT_STARTUP_SLA_SECONDS` | `120` | Default startup SLA |
-| `RECEIPT_RETENTION_HOURS` | `72` | Receipt retention period |
-| `DEFAULT_TENANT_KEY` | `default` | Default tenant key |
-| `DEFAULT_DEPLOYMENT_KEY` | `default` | Default deployment key |
-| `RECEIPTGATE_ENDPOINT` | (none) | ReceiptGate MCP endpoint |
-| `RECEIPTGATE_AUTH_TOKEN` | (none) | ReceiptGate auth token |
-| `RECEIPTGATE_EMIT_RECEIPTS` | `true` | Emit startup receipts to ReceiptGate |
+| `METAGATE_DEBUG` | `false` | Enable debug mode |
+| `METAGATE_HOST` | `0.0.0.0` | Server bind address |
+| `METAGATE_METAGATE_VERSION` | `0.1` | MetaGate version reported in discovery and bootstrap responses. The doubled prefix is real: the field is named `metagate_version` and the env prefix is `METAGATE_` |
+| `METAGATE_INSTANCE_ID` | `metagate-1` | Instance identifier |
+| `METAGATE_PORT` | `8000` | Server port |
+
+### Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METAGATE_DATABASE_URL` | `postgresql+asyncpg://metagate:metagate@db:5432/metagate` | Database connection URL |
+
+### Authentication
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METAGATE_ADMIN_ALLOW_CROSS_TENANT` | `false` | Allow admin operations across tenants |
+| `METAGATE_ADMIN_PRINCIPAL_KEYS` | *(empty)* | Explicit principal keys allowed to access admin tools |
+| `METAGATE_ADMIN_PRINCIPAL_TYPES` | `['admin']` | Principal types allowed to access admin tools |
+| `METAGATE_JWT_ALGORITHM` | `HS256` | JWT algorithm |
+| `METAGATE_JWT_ISSUER` | *(unset)* | JWT issuer |
+| `METAGATE_JWT_SECRET` | `change-me-in-production` | JWT secret key |
+
+### Upstream services
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METAGATE_RECEIPTGATE_AUTH_TOKEN` | *(empty)* | ReceiptGate auth token |
+| `METAGATE_RECEIPTGATE_EMIT_RECEIPTS` | `true` | Emit startup receipts to ReceiptGate |
+| `METAGATE_RECEIPTGATE_ENDPOINT` | *(empty)* | ReceiptGate MCP endpoint |
+
+### Rate limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METAGATE_RATE_LIMIT_ENABLED` | `true` | Enable rate limiting |
+| `METAGATE_RATE_LIMIT_REQUESTS_PER_MINUTE` | `100` | Rate limit per minute |
+
+### CORS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METAGATE_CORS_ALLOW_CREDENTIALS` | `true` | Allow credentials in CORS requests |
+| `METAGATE_CORS_ALLOWED_HEADERS` | `['Authorization', 'Content-Type', 'X-Tenant-ID']` | Allowed request headers |
+| `METAGATE_CORS_ALLOWED_METHODS` | `['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']` | Allowed HTTP methods |
+| `METAGATE_CORS_ALLOWED_ORIGINS` | `['http://localhost:3000', 'http://localhost:8080']` | Allowed CORS origins (explicit allowlist for security) |
+
+### Behaviour and limits
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METAGATE_API_KEY_HEADER` | `X-API-Key` | API key header name |
+| `METAGATE_DEFAULT_DEPLOYMENT_KEY` | `default` | Default deployment key |
+| `METAGATE_DEFAULT_STARTUP_SLA_SECONDS` | `120` | Default startup SLA in seconds |
+| `METAGATE_DEFAULT_TENANT_KEY` | `default` | Default tenant key |
+| `METAGATE_RECEIPT_RETENTION_HOURS` | `72` | Receipt retention in hours |
 
 ## Core Concepts
 
