@@ -1,3 +1,13 @@
+# Build context is the STACK ROOT, not this repository:
+#
+#     docker build -f MetaGate/Dockerfile .
+#
+# The image installs the canonical protocol package from the sibling LegiVellum
+# checkout. `legivellum` is a hard dependency and is not published to an index,
+# so a repo-scoped context cannot satisfy it -- the build fails with
+# "No matching distribution found for legivellum" rather than silently
+# producing an image that cannot validate receipts.
+
 # MetaGate Dockerfile
 # Bootstrap authority for LegiVellum-compatible systems
 
@@ -18,14 +28,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for caching
-COPY requirements.txt .
+# The canonical protocol package first: receipt models, validation, and the
+# schema, which ships as package data so validation needs no source checkout.
+COPY LegiVellum/pyproject.toml LegiVellum/README.md /src/LegiVellum/
+COPY LegiVellum/shared/ /src/LegiVellum/shared/
+RUN pip install --no-cache-dir /src/LegiVellum
+
+COPY MetaGate/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY src/ ./src/
-COPY migrations/ ./migrations/
+COPY MetaGate/src/ ./src/
+COPY MetaGate/migrations/ ./migrations/
 
 # Create non-root user
 RUN adduser --disabled-password --gecos "" metagate && \
